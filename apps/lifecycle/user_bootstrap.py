@@ -7,28 +7,31 @@ from datetime import datetime
 from firebase_admin import auth as firebase_auth
 
 from ...infra.firebase.firestore import FirestoreClient
+from ...packages.core.demo_user import demo_user_email
 from ...packages.core.models.user_profile import UserProfile
 from ..api.store import get_store
 
-# Demo dashboard roster (connections/events) is attached to this account only.
-# Profile fields still come from Firebase Auth (Google name/photo/email).
-OWNER_DEMO_EMAIL = "dzakwan1844@gmail.com"
-
 
 def maybe_seed_owner_demo(uid: str, email: str | None) -> None:
-    """Ensure GTM Hackathon demo roster exists for the owner account."""
-    resolved = (email or "").lower()
+    """Ensure the GTM Hackathon demo roster exists for the configured account.
+
+    The account comes from ``WARMTH_DEMO_USER_EMAIL``. When that variable is
+    unset, nobody is seeded.
+    """
+    owner = demo_user_email()
+    if not owner:
+        return
+    resolved = (email or "").strip().lower()
     if not resolved:
         try:
             import firebase_admin
-            if firebase_admin._apps:
-                from firebase_admin import auth as firebase_auth
 
+            if firebase_admin._apps:
                 record = firebase_auth.get_user(uid)
-                resolved = (record.email or "").lower()
+                resolved = (record.email or "").strip().lower()
         except Exception:
             return
-    if resolved != OWNER_DEMO_EMAIL.lower():
+    if resolved != owner:
         return
     get_store(uid).ensure_user_seed(uid)
 
@@ -56,10 +59,12 @@ class UserBootstrapService:
             updated_at=now,
         )
 
-        # Profile always from Google Auth; demo roster only for the owner account.
-        email = (record.email or "").lower()
+        # Profile always comes from Google Auth. The demo roster is attached
+        # only when this account matches WARMTH_DEMO_USER_EMAIL.
+        owner = demo_user_email()
+        email = (record.email or "").strip().lower()
         store = get_store(uid)
-        if email == OWNER_DEMO_EMAIL.lower():
+        if owner and email == owner:
             store.ensure_user_seed(uid)
             profile.demo_seeded = True
         elif existing is None and not profile.demo_seeded:

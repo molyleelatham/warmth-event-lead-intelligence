@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Seed GTM Hackathon demo data into Firestore for a user (by email).
 
+The email comes from the first argument, or from WARMTH_DEMO_USER_EMAIL when
+the argument is omitted.
+
 Usage:
-  uv run python scripts/migrate_user_demo_to_firestore.py dzakwan1844@gmail.com
+  export WARMTH_DEMO_USER_EMAIL=<firebase-user-email>
+  uv run python scripts/migrate_user_demo_to_firestore.py
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -28,29 +33,48 @@ load_secrets_into_env()
 
 os.environ.setdefault("GCP_PROJECT_ID", "warmth-gtm-hackathon")
 
+
+def _ensure_warmth_namespace() -> None:
+    """Match the Cloud Run layout so infra's relative imports resolve."""
+    if "warmth" in sys.modules:
+        return
+    init = Path(ROOT) / "__init__.py"
+    spec = importlib.util.spec_from_file_location(
+        "warmth",
+        init,
+        submodule_search_locations=[ROOT],
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Failed to load the warmth package")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["warmth"] = module
+    spec.loader.exec_module(module)
+
+
+_ensure_warmth_namespace()
+
 from firebase_admin import auth as firebase_auth  # noqa: E402
 from firebase_admin import firestore as firebase_firestore  # noqa: E402
 
-from infra.firebase.admin import ensure_firebase_initialized  # noqa: E402
-from infra.firebase.user_store_repo import UserStoreRepository  # noqa: E402
+from warmth.infra.firebase.admin import ensure_firebase_initialized  # noqa: E402
+from warmth.infra.firebase.user_store_repo import UserStoreRepository  # noqa: E402
 from packages.core.models.event import DetectedEvent, EventType, LifecycleStage  # noqa: E402
 from packages.core.models.pre_connection import PreMeetConnection, PreMeetStatus  # noqa: E402
 from packages.core.models.warmth import WarmthScore, WarmthBand  # noqa: E402
+from packages.core.demo_user import demo_user_email  # noqa: E402
 from packages.core.models.user_profile import UserProfile  # noqa: E402
 
-OWNER_DEMO_EMAIL = "dzakwan1844@gmail.com"
 GTM_EVENT_ID = "event_gtm_hackathon_london"
 GTM_DATA_FILE = Path(ROOT) / "data" / "gtm_hackathon_attendees.json"
 GTM_ATTENDEE_IDS = {
     "molyleelatham@gmail.com": "premeet_moly_leelatham",
-    "dzakwan1844@gmail.com": "premeet_dzakwan_nabil",
     "nicholasyswong@googlemail.com": "premeet_nicholas_wong",
 }
 GTM_SCORES = {
     "molyleelatham@gmail.com": {"icp": 88, "warmth": 82, "intent": 75},
-    "dzakwan1844@gmail.com": {"icp": 71, "warmth": 58, "intent": 52},
     "nicholasyswong@googlemail.com": {"icp": 76, "warmth": 68, "intent": 60},
 }
+_DEFAULT_GTM_SCORES = {"icp": 65, "warmth": 50, "intent": 45}
 
 
 def _notes_list(raw) -> list[str]:
@@ -80,9 +104,13 @@ def _build_demo_store(user_id: str) -> SimpleNamespace:
     pre_connections = {}
     warmth = {}
     for att in attendees:
-        email = (att.get("email") or "").lower()
-        scores = GTM_SCORES.get(email, {"icp": 65, "warmth": 50, "intent": 45})
-        conn_id = GTM_ATTENDEE_IDS.get(email, f"premeet_{email.replace('@', '_')}")
+        email = (att.get("email") or "").strip().lower()
+        scores = GTM_SCORES.get(email, _DEFAULT_GTM_SCORES) if email else _DEFAULT_GTM_SCORES
+        if email:
+            conn_id = GTM_ATTENDEE_IDS.get(email, f"premeet_{email.replace('@', '_')}")
+        else:
+            slug = re.sub(r"[^a-z0-9]+", "_", (att.get("name") or "attendee").lower()).strip("_")
+            conn_id = f"premeet_{slug or 'attendee'}"
         conn = PreMeetConnection(
             id=conn_id,
             event_id=event.id,
@@ -128,12 +156,25 @@ def _build_demo_store(user_id: str) -> SimpleNamespace:
     )
 
 
+def resolve_owner_email(argv: list[str] | None = None) -> str:
+    """Email from the CLI, otherwise WARMTH_DEMO_USER_EMAIL."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    chosen = args[0] if args else demo_user_email()
+    email = (chosen or "").strip().lower()
+    if not email or "@" not in email:
+        raise SystemExit(
+            "Set WARMTH_DEMO_USER_EMAIL or pass the Firebase Auth email as the first argument."
+        )
+    return email
+
+
 def main() -> None:
-    email = (sys.argv[1] if len(sys.argv) > 1 else OWNER_DEMO_EMAIL).lower()
+    email = resolve_owner_email()
+    print(f"Migrating demo roster for {email}...")
     ensure_firebase_initialized()
     user = firebase_auth.get_user_by_email(email)
     uid = user.uid
-    print(f"Migrating demo roster for {email} (uid={uid})...")
+    print(f"Firebase uid={uid}")
 
     store = _build_demo_store(uid)
     repo = UserStoreRepository(firebase_firestore.client())

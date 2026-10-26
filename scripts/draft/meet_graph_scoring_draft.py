@@ -58,14 +58,6 @@ DEFAULT_ATTENDEES = [
         "icp_score": 76,
         "predicted_warmth": 68,
     },
-    {
-        "name": "Zamir",
-        "email": "dzakwan1844@gmail.com",
-        "company": None,
-        "interests": ["gtm", "saas", "sales"],
-        "icp_score": 71,
-        "predicted_warmth": 58,
-    },
 ]
 
 # Diarized windows: speaker 0 = you, speaker 1 = counterpart (Nick Wong demo)
@@ -325,10 +317,13 @@ def load_attendees() -> list[dict[str, Any]]:
         raw = json.loads(ATTENDEES_FILE.read_text())
         out = []
         for row in raw:
+            email = (row.get("email") or "").strip()
+            if not email:
+                continue
             out.append(
                 {
                     "name": row.get("name"),
-                    "email": row.get("email"),
+                    "email": email,
                     "company": row.get("company") or row.get("company_name"),
                     "interests": [i.lower() for i in (row.get("interests") or [])],
                     "icp_score": 75,

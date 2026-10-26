@@ -25,15 +25,23 @@ GTM_DATA_FILE = Path(__file__).resolve().parents[2] / "data" / "gtm_hackathon_at
 # Stable ids so dashboard links survive refreshes
 GTM_ATTENDEE_IDS = {
     "molyleelatham@gmail.com": "premeet_moly_leelatham",
-    "dzakwan1844@gmail.com": "premeet_zamir",
     "nicholasyswong@googlemail.com": "premeet_nick_wong",
 }
 
 GTM_SCORES = {
     "molyleelatham@gmail.com": {"icp": 88, "warmth": 82, "intent": 75, "band": WarmthBand.HOT},
-    "dzakwan1844@gmail.com": {"icp": 71, "warmth": 58, "intent": 52, "band": WarmthBand.WARM},
     "nicholasyswong@googlemail.com": {"icp": 76, "warmth": 68, "intent": 60, "band": WarmthBand.WARM},
 }
+
+_DEFAULT_GTM_SCORES = {"icp": 65, "warmth": 50, "intent": 45, "band": WarmthBand.WARM}
+
+
+def _attendee_connection_id(email: str, name: str | None) -> str:
+    """Stable connection id. Attendees without an email are keyed by name."""
+    if email:
+        return GTM_ATTENDEE_IDS.get(email, f"premeet_{email.replace('@', '_')}")
+    slug = re.sub(r"[^a-z0-9]+", "_", (name or "attendee").lower()).strip("_")
+    return f"premeet_{slug or 'attendee'}"
 
 
 def _notes_list(raw: Any) -> list[str]:
@@ -145,17 +153,17 @@ class DemoStore:
             attendees = []
 
         for att in attendees:
-            email = (att.get("email") or "").lower()
-            scores = GTM_SCORES.get(email, {"icp": 65, "warmth": 50, "intent": 45, "band": WarmthBand.WARM})
+            email = (att.get("email") or "").strip().lower()
+            scores = GTM_SCORES.get(email, _DEFAULT_GTM_SCORES) if email else _DEFAULT_GTM_SCORES
             merged = results_by_email.get(email)
-            conn_id = GTM_ATTENDEE_IDS.get(email, f"premeet_{email.replace('@', '_')}")
+            conn_id = _attendee_connection_id(email, att.get("name"))
 
             conn = PreMeetConnection(
                 id=conn_id,
                 event_id=event.id,
                 user_id=user_id,
                 name=att.get("name"),
-                email=att.get("email"),
+                email=att.get("email") or None,
                 title=_title_from_attendee(att) or (merged.title if merged else None),
                 linkedin=att.get("linkedin") or (merged.linkedin if merged else None),
                 company_name=_company_from_attendee(att) or (merged.company_name if merged else None),

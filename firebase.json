@@ -43,8 +43,7 @@
     ],
     "providers": {
       "googleSignIn": {
-        "oAuthBrandDisplayName": "Warmth",
-        "supportEmail": "dzakwan1844@gmail.com"
+        "oAuthBrandDisplayName": "Warmth"
       }
     }
   }
