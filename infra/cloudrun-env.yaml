@@ -9,3 +9,5 @@ USE_FIRESTORE_STORE: "true"
 SIGNAL_RATE_LIMIT_ENABLED: "true"
 SIGNAL_RATE_LIMIT_IP_PER_MINUTE: "30"
 SIGNAL_RATE_LIMIT_TOKEN_PER_MINUTE: "60"
+# Optional. Set WARMTH_DEMO_USER_EMAIL on the service to seed that Firebase
+# Auth account with the demo roster. Leave it unset and nobody is seeded.

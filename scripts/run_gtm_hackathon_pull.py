@@ -50,7 +50,6 @@ TOP_N = 10
 GTM_NAME_OVERRIDES = {
     "molyleelatham@gmail.com": "Moly Leelatham",
     "nicholasyswong@googlemail.com": "Nick Wong",
-    "dzakwan1844@gmail.com": "Zamir",
 }
 GTM_PROFILE_HINTS = {
     "molyleelatham@gmail.com": {
